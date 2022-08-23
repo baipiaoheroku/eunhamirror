@@ -144,72 +144,37 @@ CATATAN: Coba setiap perintah tanpa perfiks apa pun untuk melihat lebih detail.
 /{BotCommands.ExecCommand}: Jalankan Perintah Di Exec (Hanya Pemilik).
 /{BotCommands.ClearLocalsCommand}: Hapus penduduk lokal {BotCommands.EvalCommand} atau {BotCommands.ExecCommand} (Hanya Pemilik).
 '''
-
 def bot_help(update, context):
     sendMessage(help_string, context.bot, update.message)
 
-botcmds = [
-
-        (f'{BotCommands.MirrorCommand[0]}', 'Mirror'),
-        (f'{BotCommands.ZipMirrorCommand[0]}','Mirror lalu arsip ke zip'),
-        (f'{BotCommands.UnzipMirrorCommand[0]}','Mirror dan ekstrak file'),
-        (f'{BotCommands.QbMirrorCommand[0]}','Mirror torrent menggunakan qBittorrent'),
-        (f'{BotCommands.QbZipMirrorCommand[0]}','Mirror torrent menggunakan qBittorrent dan arsip ke zip'),
-        (f'{BotCommands.QbUnzipMirrorCommand[0]}','Mirror torrent menggunakan qBittorrent dan ekstrak file'),
-        (f'{BotCommands.YtdlCommand[0]}','Mirror YouTube link'),
-        (f'{BotCommands.YtdlZipCommand[0]}','Mirror YouTube link lalu arsip ke zip'),
-        (f'{BotCommands.LeechCommand[0]}','Upload file ke telegram'),
-        (f'{BotCommands.ZipLeechCommand[0]}','Arsip file ke zip lalu Upload ke telegram'),
-        (f'{BotCommands.UnzipLeechCommand[0]}','Ekstrak file lalu Upload file ke telegram'),
-        (f'{BotCommands.QbLeechCommand[0]}','Upload torrent ke telegram menggunakan qBittorrent'),
-        (f'{BotCommands.QbZipLeechCommand[0]}','Arsip torrent ke zip lalu Upload ke telegram menggunakan qBittorrent'),
-        (f'{BotCommands.QbUnzipLeechCommand[0]}','Ekstrak torrent lalu Upload ke telegram menggunakan qBittorrent'),
-        (f'{BotCommands.YtdlLeechCommand[0]}','Upload YouTube video ke telegram'),
-        (f'{BotCommands.YtdlZipLeechCommand[0]}','Arsip ke zip YouTube video lalu upload ke telegram'),
-        (f'{BotCommands.CloneCommand}','Copy file/folder to Drive'),
-        (f'{BotCommands.CountCommand}','Menghitung file/folder dari Drive'),
-        (f'{BotCommands.DeleteCommand}','Menghapus file/folder dari Drive'),
-        (f'{BotCommands.CancelMirror}','Cancel sebuah task'),
-        (f'{BotCommands.CancelAllCommand}','Cancel semua downloading tasks'),
-        (f'{BotCommands.LeechSetCommand}','Leech settings'),
-        (f'{BotCommands.SetThumbCommand}','Set Leech thumbnail'),
-        (f'{BotCommands.ListCommand}', 'Mencari file yang sudah ada di Drive'),
-        (f'{BotCommands.StatusCommand}','Menampilkan status mirror'),
-        (f'{BotCommands.StatsCommand}','Statistik penggunaan bot'),
-        (f'{BotCommands.PingCommand}','Ping bot'),
-        (f'{BotCommands.HelpCommand}','Mendapatkan detail perintah bot')
-    ]
-
 def main():
-    bot.set_my_commands(botcmds)
     start_cleanup()
-    notifier_dict = False
     if INCOMPLETE_TASK_NOTIFIER and DB_URI is not None:
         if notifier_dict := DbManger().get_incomplete_tasks():
             for cid, data in notifier_dict.items():
                 if ospath.isfile(".restartmsg"):
                     with open(".restartmsg") as f:
                         chat_id, msg_id = map(int, f)
-                    msg = '♻️ <b>Restarted successfully!</b>'
+                    msg = 'Restarted Successfully!'
                 else:
-                    msg = '♻️ <b>Bot Restarted!</b>'
+                    msg = 'Bot Restarted!'
                 for tag, links in data.items():
-                    msg += f"\n\n⚠️ {tag} <b>{len(links)} Proses mirror kamu dibatalkan</b>"
-                    for index, link in enumerate(links, start=1):
-                        msg += f"\n📍 <a href='{link}'><u>Proses ke {index}</u></a>"
-                        if len(msg.encode()) > 4000:
-                            if '♻️ <b>Restarted successfully!</b>' in msg and cid == chat_id:
-                                bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTMl', disable_web_page_preview=True)
-                                osremove(".restartmsg")
-                            else:
-                                try:
-                                    bot.sendMessage(cid, msg, 'HTML', disable_web_page_preview=True)
-                                except Exception as e:
-                                    LOGGER.error(e)
-                            msg = ''
-                if '♻️ <b>Restarted successfully!</b>' in msg and cid == chat_id:
-                    bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTMl', disable_web_page_preview=True)
-                    osremove(".restartmsg")
+                     msg += f"\n\n{tag}: "
+                     for index, link in enumerate(links, start=1):
+                         msg += f" <a href='{link}'>{index}</a> |"
+                         if len(msg.encode()) > 4000:
+                             if 'Restarted Successfully!' in msg and cid == chat_id:
+                                 bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTML', disable_web_page_preview=True)
+                                 osremove(".restartmsg")
+                             else:
+                                 try:
+                                     bot.sendMessage(cid, msg, 'HTML', disable_web_page_preview=True)
+                                 except Exception as e:
+                                     LOGGER.error(e)
+                             msg = ''
+                if 'Restarted Successfully!' in msg and cid == chat_id:
+                     bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTML', disable_web_page_preview=True)
+                     osremove(".restartmsg")
                 else:
                     try:
                         bot.sendMessage(cid, msg, 'HTML', disable_web_page_preview=True)
@@ -219,7 +184,7 @@ def main():
     if ospath.isfile(".restartmsg"):
         with open(".restartmsg") as f:
             chat_id, msg_id = map(int, f)
-        bot.editMessageText("♻️ <b>Restarted successfully!</b>", chat_id, msg_id, parse_mode='HTMl', disable_web_page_preview=True)
+        bot.edit_message_text("Restarted Successfully!", chat_id, msg_id)
         osremove(".restartmsg")
 
     start_handler = CommandHandler(BotCommands.StartCommand, start, run_async=True)
