@@ -80,6 +80,7 @@ srun(["cp", ".netrc", "/root/.netrc"])
 srun(["chmod", "600", ".netrc"])
 srun(["chmod", "+x", "aria.sh"])
 srun("./aria.sh", shell=True)
+alive = Popen(["python3", "alive.py"])
 sleep(0.5)
 
 Interval = []
