@@ -54,7 +54,12 @@ class AriaDownloadStatus:
         return self.__download.total_length_string()
 
     def eta(self):
-        return self.__download.eta_string()
+        seconds = self.__download.eta
+        if seconds.total_seconds() >= 86400000000000:
+            return '-'
+        else:
+            return f'{get_readable_time(seconds.total_seconds())}'
+        # return self.__download.eta_string()
 
     def status(self):
         download = self.__download
@@ -104,9 +109,9 @@ class AriaDownloadStatus:
         elif len(self.__download.followed_by_ids) != 0:
             LOGGER.info(f"Cancelling Download: {self.name()}")
             downloads = aria2.get_downloads(self.__download.followed_by_ids)
-            self.__listener.onDownloadError('Download stopped by user!')
+            self.__listener.onDownloadError('Download distop oleh user!')
             aria2.remove(downloads, force=True, files=True)
         else:
             LOGGER.info(f"Cancelling Download: {self.name()}")
-            self.__listener.onDownloadError('Download stopped by user!')
+            self.__listener.onDownloadError('Download distop oleh user!')
         aria2.remove([self.__download], force=True, files=True)

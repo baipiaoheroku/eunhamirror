@@ -1,6 +1,8 @@
 anytree
+appdirs
 aria2p
 asyncio
+attrdict
 beautifulsoup4
 bencoding
 cfscrape
@@ -27,4 +29,5 @@ SecretStorage
 tenacity
 tgCrypto
 xattr
+urllib3
 yt-dlp

@@ -3,13 +3,18 @@ from bot import CMD_INDEX
 
 class _BotCommands:
     def __init__(self):
-        self.StartCommand = f'start{CMD_INDEX}'
+        self.StartCommand = f'start'
+        self.RestartCommand = f'restart'
+        self.StatsCommand = f'stats'
+        self.LogCommand = f'log'
+        self.PingCommand = f'ping'
+        self.StatusCommand = f'status'
         self.MirrorCommand = (f'mirror{CMD_INDEX}', f'm{CMD_INDEX}')
-        self.UnzipMirrorCommand = (f'unzipmirror{CMD_INDEX}', f'uzm{CMD_INDEX}')
-        self.ZipMirrorCommand = (f'zipmirror{CMD_INDEX}', f'zm{CMD_INDEX}')
-        self.QbMirrorCommand = (f'qbmirror{CMD_INDEX}', f'qm{CMD_INDEX}')
-        self.QbUnzipMirrorCommand = (f'qbunzipmirror{CMD_INDEX}', f'quzm{CMD_INDEX}')
-        self.QbZipMirrorCommand = (f'qbzipmirror{CMD_INDEX}', f'qzm{CMD_INDEX}')
+        self.UnzipMirrorCommand = (f'unzip{CMD_INDEX}', f'uzm{CMD_INDEX}')
+        self.ZipMirrorCommand = (f'zip{CMD_INDEX}', f'zm{CMD_INDEX}')
+        self.QbMirrorCommand = (f'qb{CMD_INDEX}', f'qm{CMD_INDEX}')
+        self.QbUnzipMirrorCommand = (f'qbunzip{CMD_INDEX}', f'quzm{CMD_INDEX}')
+        self.QbZipMirrorCommand = (f'qbzip{CMD_INDEX}', f'qzm{CMD_INDEX}')
         self.YtdlCommand = (f'ytdl{CMD_INDEX}', f'y{CMD_INDEX}')
         self.YtdlZipCommand = (f'ytdlzip{CMD_INDEX}', f'yz{CMD_INDEX}')
         self.LeechCommand = (f'leech{CMD_INDEX}', f'l{CMD_INDEX}')
@@ -27,17 +32,12 @@ class _BotCommands:
         self.CancelAllCommand = f'cancelall{CMD_INDEX}'
         self.ListCommand = f'list{CMD_INDEX}'
         self.SearchCommand = f'search{CMD_INDEX}'
-        self.StatusCommand = f'status{CMD_INDEX}'
         self.AuthorizedUsersCommand = f'users{CMD_INDEX}'
         self.AuthorizeCommand = f'authorize{CMD_INDEX}'
         self.UnAuthorizeCommand = f'unauthorize{CMD_INDEX}'
         self.AddSudoCommand = f'addsudo{CMD_INDEX}'
         self.RmSudoCommand = f'rmsudo{CMD_INDEX}'
-        self.PingCommand = f'ping{CMD_INDEX}'
-        self.RestartCommand = f'restart{CMD_INDEX}'
-        self.StatsCommand = f'stats{CMD_INDEX}'
         self.HelpCommand = f'help{CMD_INDEX}'
-        self.LogCommand = f'log{CMD_INDEX}'
         self.ShellCommand = f'shell{CMD_INDEX}'
         self.EvalCommand = f'eval{CMD_INDEX}'
         self.ExecCommand = f'exec{CMD_INDEX}'
@@ -50,5 +50,6 @@ class _BotCommands:
         self.RssSubCommand = (f'rsssub{CMD_INDEX}', f'rs{CMD_INDEX}')
         self.RssUnSubCommand = (f'rssunsub{CMD_INDEX}', f'rus{CMD_INDEX}')
         self.RssSettingsCommand = (f'rssset{CMD_INDEX}', f'rst{CMD_INDEX}')
+        self.SleepCommand = f'sleep{CMD_INDEX}'
 
 BotCommands = _BotCommands()

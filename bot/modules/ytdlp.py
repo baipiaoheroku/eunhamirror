@@ -4,7 +4,7 @@ from time import sleep
 from re import split as re_split
 
 from bot import DOWNLOAD_DIR, dispatcher
-from bot.helper.telegram_helper.message_utils import sendMessage, sendMarkup, editMessage
+from bot.helper.telegram_helper.message_utils import sendMessage, sendMarkup, editMessage, deleteMessage, auto_delete_message
 from bot.helper.telegram_helper import button_build
 from bot.helper.ext_utils.bot_utils import get_readable_file_size, is_url
 from bot.helper.mirror_utils.download_utils.yt_dlp_download_helper import YoutubeDLHelper
@@ -18,7 +18,7 @@ def _ytdl(bot, message, isZip=False, isLeech=False):
     mssg = message.text
     user_id = message.from_user.id
     msg_id = message.message_id
-    multi=1
+    multi = 1
 
     link = mssg.split()
     if len(link) > 1:
@@ -71,22 +71,21 @@ def _ytdl(bot, message, isZip=False, isLeech=False):
             tag = reply_to.from_user.mention_html(reply_to.from_user.first_name)
 
     if not is_url(link):
-        help_msg = """
-<b>Send link along with command line:</b>
-<code>/command</code> {link} |newname pswd: mypassword [zip] args: x:y|x1:y1
+        help_msg = f"ℹ️ {tag} Tidak ada link video yang mau di-mirror. Lihat format dibawah!"
+        help_msg += "\n<code>/command</code> {link} |newname pswd: mypassword [zip] args: x:y|x1:y1"
+        help_msg += "\n\n<b>Args Example:</b> args: playliststart:^10|match_filter:season_number=18|matchtitle:S1"
+        help_msg += "\n\n<b>NOTE:</b> Add `^` before integer, some values must be integer and some string."
+        help_msg += " Like playlist_items:10 works with string so no need to add `^` before the number"
+        help_msg += " but playlistend works only with integer so you must add `^` before the number like example above."
+        help_msg += "\n\nCheck all arguments from this <a href='https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#L178'>FILE</a>."
+        smsg = sendMessage(help_msg, bot, message)
+        Thread(target=auto_delete_message, args=(bot, message, smsg)).start()
+        return
 
-<b>By replying to link:</b>
-<code>/command</code> |newname pswd: mypassword [zip] args: x:y|x1:y1
 
-<b>Args Example:</b> args: playliststart:^10|matchtitle:S13|writesubtitles:true|live_from_start:true|postprocessor_args:{"ffmpeg": ["-threads", "4"]}|wait_for_video:(5, 100)
-
-<b>Args Note:</b> Add `^` before integer, some values must be integer and some string.
-Like playlist_items:10 works with string, so no need to add `^` before the number but playlistend works only with integer so you must add `^` before the number like example above.
-You can add tuple and dict also. Use double quotes inside dict. Also you can add format manually, whatever what quality button you have pressed.
-
-Check all arguments from this <a href='https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#L178'>FILE</a>.
-        """
-        return sendMessage(help_msg, bot, message)
+    if multi == 1:
+        check_ = sendMessage(f"ℹ️ {tag} Sedang memeriksa link, Tunggu sebentar...", bot, message)
+    else: check_ = None
 
     listener = MirrorLeechListener(bot, message, isZip, isLeech=isLeech, pswd=pswd, tag=tag)
     buttons = button_build.ButtonMaker()
@@ -95,9 +94,13 @@ Check all arguments from this <a href='https://github.com/yt-dlp/yt-dlp/blob/mas
     ydl = YoutubeDLHelper(listener)
     try:
         result = ydl.extractMetaData(link, name, args, True)
+        if check_ != None:
+            deleteMessage(bot, check_)
     except Exception as e:
-        msg = str(e).replace('<', ' ').replace('>', ' ')
-        return sendMessage(tag + " " + msg, bot, message)
+        if check_ != None:
+            deleteMessage(bot, check_)
+        msg = str(e).replace('<', ' ').replace('>', ' ').replace(';','').split('please report this issue on')[0]
+        return sendMessage(f"⚠️ {tag} {msg.strip()}", bot, message)
     if 'entries' in result:
         for i in ['144', '240', '360', '480', '720', '1080', '1440', '2160']:
             video_format = f"bv*[height<=?{i}][ext=mp4]+ba/b[height<=?{i}]"
@@ -110,14 +113,13 @@ Check all arguments from this <a href='https://github.com/yt-dlp/yt-dlp/blob/mas
         buttons.sbutton("Cancel", f"qu {msg_id} cancel")
         YTBUTTONS = buttons.build_menu(3)
         listener_dict[msg_id] = [listener, user_id, link, name, YTBUTTONS, args]
-        bmsg = sendMarkup('Choose Playlist Videos Quality:', bot, message, YTBUTTONS)
+        bmsg = sendMarkup(f'ℹ️ {tag} Pilih Kualitas Playlist Video:', bot, message, YTBUTTONS)
     else:
         formats = result.get('formats')
         formats_dict = {}
         if formats is not None:
             for frmt in formats:
                 if frmt.get('tbr'):
-
                     format_id = frmt['format_id']
 
                     if frmt.get('filesize'):
@@ -157,7 +159,7 @@ Check all arguments from this <a href='https://github.com/yt-dlp/yt-dlp/blob/mas
         buttons.sbutton("Cancel", f"qu {msg_id} cancel")
         YTBUTTONS = buttons.build_menu(2)
         listener_dict[msg_id] = [listener, user_id, link, name, YTBUTTONS, args, formats_dict]
-        bmsg = sendMarkup('Choose Video Quality:', bot, message, YTBUTTONS)
+        bmsg = sendMarkup(f'ℹ️ {tag} Pilih Kualitas Video:', bot, message, YTBUTTONS)
 
     Thread(target=_auto_cancel, args=(bmsg, msg_id)).start()
     if multi > 1:
@@ -178,7 +180,7 @@ def _qual_subbuttons(task_id, b_name, msg):
     buttons.sbutton("Back", f"qu {task_id} back")
     buttons.sbutton("Cancel", f"qu {task_id} cancel")
     SUBBUTTONS = buttons.build_menu(2)
-    editMessage(f"Choose Bit rate for <b>{b_name}</b>:", msg, SUBBUTTONS)
+    editMessage(f"Pilih Bitrate untuk <b>{b_name}</b>:", msg, SUBBUTTONS)
 
 def _mp3_subbuttons(task_id, msg, playlist=False):
     buttons = button_build.ButtonMaker()
@@ -194,7 +196,7 @@ def _mp3_subbuttons(task_id, msg, playlist=False):
     buttons.sbutton("Back", f"qu {task_id} back")
     buttons.sbutton("Cancel", f"qu {task_id} cancel")
     SUBBUTTONS = buttons.build_menu(2)
-    editMessage(f"Choose Audio{i} Bitrate:", msg, SUBBUTTONS)
+    editMessage(f"Pilih Audio{i} Bitrate:", msg, SUBBUTTONS)
 
 def select_format(update, context):
     query = update.callback_query
@@ -206,10 +208,10 @@ def select_format(update, context):
     try:
         task_info = listener_dict[task_id]
     except:
-        return editMessage("This is an old task", msg)
+        return editMessage("Itu adalah task lama", msg)
     uid = task_info[1]
     if user_id != uid and not CustomFilters._owner_query(user_id):
-        return query.answer(text="This task is not for you!", show_alert=True)
+        return query.answer(text="Bukan buat elu!", show_alert=True)
     elif data[2] == "dict":
         query.answer()
         b_name = data[3]
@@ -217,7 +219,7 @@ def select_format(update, context):
         return
     elif data[2] == "back":
         query.answer()
-        return editMessage('Choose Video Quality:', msg, task_info[4])
+        return editMessage('Pilih Kualitas Video:', msg, task_info[4])
     elif data[2] == "mp3":
         query.answer()
         if len(data) == 4:
@@ -249,9 +251,10 @@ def _auto_cancel(msg, msg_id):
     sleep(120)
     try:
         del listener_dict[msg_id]
-        editMessage('Timed out! Task has been cancelled.', msg)
+        editMessage('Timed out! Task telah dibatalkan.', msg)
     except:
         pass
+
 
 def ytdl(update, context):
     _ytdl(context.bot, update.message)

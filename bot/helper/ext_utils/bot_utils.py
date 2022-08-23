@@ -1,11 +1,12 @@
-from re import findall as re_findall
+from re import match as re_match, findall as re_findall, split as re_split
 from threading import Thread, Event
 from time import time
 from math import ceil
 from html import escape
-from psutil import virtual_memory, cpu_percent, disk_usage
+from psutil import cpu_percent, disk_usage
 from requests import head as rhead
 from urllib.request import urlopen
+from urllib.parse import quote
 
 from bot import download_dict, download_dict_lock, STATUS_LIMIT, botStartTime, DOWNLOAD_DIR, WEB_PINCODE, BASE_URL
 from bot.helper.telegram_helper.bot_commands import BotCommands
@@ -20,16 +21,16 @@ PAGE_NO = 1
 
 
 class MirrorStatus:
-    STATUS_UPLOADING = "Upload"
-    STATUS_DOWNLOADING = "Download"
-    STATUS_CLONING = "Clone"
-    STATUS_WAITING = "Queue"
-    STATUS_PAUSED = "Pause"
-    STATUS_ARCHIVING = "Archive"
-    STATUS_EXTRACTING = "Extract"
-    STATUS_SPLITTING = "Split"
-    STATUS_CHECKING = "CheckUp"
-    STATUS_SEEDING = "Seed"
+    STATUS_UPLOADING = "📤 Uploading"
+    STATUS_DOWNLOADING = "📥 Downloading"
+    STATUS_CLONING = "♻️ Cloning"
+    STATUS_WAITING = "💤 Queued"
+    STATUS_PAUSED = "⛔️ Paused"
+    STATUS_ARCHIVING = "🗜 Archiving"
+    STATUS_EXTRACTING = "📂 Extracting"
+    STATUS_SPLITTING = "✂️ Splitting"
+    STATUS_CHECKING = "📝 CheckingUp"
+    STATUS_SEEDING = "🌧 Seeding"
 
 SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
 
@@ -61,7 +62,7 @@ def get_readable_file_size(size_in_bytes) -> str:
     try:
         return f'{round(size_in_bytes, 2)}{SIZE_UNITS[index]}'
     except IndexError:
-        return 'File too large'
+        return 'File terlalu besar'
 
 def getDownloadByGid(gid):
     with download_dict_lock:
@@ -93,11 +94,11 @@ def bt_selection_buttons(id_: str):
 
     buttons = ButtonMaker()
     if WEB_PINCODE:
-        buttons.buildbutton("Select Files", f"{BASE_URL}/app/files/{id_}")
+        buttons.buildbutton("Pilih Files", f"{BASE_URL}/app/files/{id_}")
         buttons.sbutton("Pincode", f"btsel pin {gid} {pincode}")
     else:
-        buttons.buildbutton("Select Files", f"{BASE_URL}/app/files/{id_}?pin_code={pincode}")
-    buttons.sbutton("Done Selecting", f"btsel done {gid} {id_}")
+        buttons.buildbutton("Pilih Files", f"{BASE_URL}/app/files/{id_}?pin_code={pincode}")
+    buttons.sbutton("Selesai Memilih", f"btsel done {gid} {id_}")
     return buttons.build_menu(2)
 
 def get_progress_bar_string(status):
@@ -114,39 +115,55 @@ def get_progress_bar_string(status):
 def get_readable_message():
     with download_dict_lock:
         msg = ""
+        tasks = len(download_dict)
         if STATUS_LIMIT is not None:
-            tasks = len(download_dict)
             global pages
             pages = ceil(tasks/STATUS_LIMIT)
             if PAGE_NO > pages and pages != 0:
                 globals()['COUNT'] -= STATUS_LIMIT
                 globals()['PAGE_NO'] -= 1
         for index, download in enumerate(list(download_dict.values())[COUNT:], start=1):
-            msg += f"<b><a href='{download.message.link}'>{download.status()}</a>: </b>"
-            msg += f"<code>{escape(str(download.name()))}</code>"
-            if download.status() not in [MirrorStatus.STATUS_SPLITTING, MirrorStatus.STATUS_SEEDING]:
-                msg += f"\n{get_progress_bar_string(download)} {download.progress()}"
-                msg += f"\n<b>Processed:</b> {get_readable_file_size(download.processed_bytes())} of {download.size()}"
-                msg += f"\n<b>Speed:</b> {download.speed()} | <b>ETA:</b> {download.eta()}"
+            ### AWAL CUSTOM STATUS ###
+            pemirror = download.message
+            reply_to = pemirror.reply_to_message
+            if not reply_to or reply_to.from_user.is_bot:
+                if pemirror.from_user.username:
+                    tag = f"<code>@{pemirror.from_user.username}</code> (<code>{pemirror.from_user.id}</code>)"
+                else:
+                    tag = f"<code>{pemirror.from_user.first_name}</code> (<code>{pemirror.from_user.id}</code>)"
+            elif reply_to.from_user.username:
+                tag = f"<code>@{reply_to.from_user.username}</code> (<code>{reply_to.from_user.id}</code>)"
+            else:
+                tag = f"<code>{reply_to.from_user.first_name}</code> (<code>{reply_to.from_user.id}</code>)"
+            ### AKHIR CUSTOM STATUS ###
+            msg += f"💽 <code>{escape(str(download.name()))}</code>"
+            msg += f"\n<a href=\"{pemirror.link}\"><b>{download.status()}</b></a>"
+            if download.status() != MirrorStatus.STATUS_SEEDING:
+                msg += f"\n🌀 {get_progress_bar_string(download)} {download.progress()}"
+                msg += f"\n📦 {get_readable_file_size(download.processed_bytes())} / {download.size()}"
+                msg += f"\n⚡️ {download.speed()} | ⏳ {download.eta()}"
+                msg += f"\n⏱ {get_readable_time(time() - download.message.date.timestamp())}"
                 if hasattr(download, 'seeders_num'):
                     try:
-                        msg += f"\n<b>Seeders:</b> {download.seeders_num()} | <b>Leechers:</b> {download.leechers_num()}"
+                        msg += f"\n🧲 <b>Seeders:</b> {download.seeders_num()} | <b>Leechers:</b> {download.leechers_num()}"
                     except:
                         pass
             elif download.status() == MirrorStatus.STATUS_SEEDING:
-                msg += f"\n<b>Size: </b>{download.size()}"
-                msg += f"\n<b>Speed: </b>{download.upload_speed()}"
-                msg += f" | <b>Uploaded: </b>{download.uploaded_bytes()}"
-                msg += f"\n<b>Ratio: </b>{download.ratio()}"
-                msg += f" | <b>Time: </b>{download.seeding_time()}"
+                msg += f"\n📦 {download.size()}"
+                msg += f" | 📤 {download.uploaded_bytes()}"
+                msg += f"\n⚡️ {download.upload_speed()}"
+                msg += f" | 🌀 <b>Ratio: </b>{download.ratio()}"
+                msg += f"\n🕒 {download.seeding_time()}"
             else:
-                msg += f"\n<b>Size: </b>{download.size()}"
-            msg += f"\n<code>/{BotCommands.CancelMirror} {download.gid()}</code>"
+                msg += f"\n📦 {download.size()}"
+            msg += f"\n👤 {tag}"
+            msg += f"\n❌ <code>/{BotCommands.CancelMirror} {download.gid()}</code>"
             msg += "\n\n"
             if STATUS_LIMIT is not None and index == STATUS_LIMIT:
                 break
         if len(msg) == 0:
             return None, None
+        msg += f"🎯 <b>Tasks:</b> {tasks}"
         dl_speed = 0
         up_speed = 0
         for download in list(download_dict.values()):
@@ -168,14 +185,13 @@ def get_readable_message():
                     up_speed += float(spd.split('K')[0]) * 1024
                 elif 'M' in spd:
                     up_speed += float(spd.split('M')[0]) * 1048576
-        bmsg = f"<b>CPU:</b> {cpu_percent()}% | <b>FREE:</b> {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)}"
-        bmsg += f"\n<b>RAM:</b> {virtual_memory().percent}% | <b>UPTIME:</b> {get_readable_time(time() - botStartTime)}"
-        bmsg += f"\n<b>DL:</b> {get_readable_file_size(dl_speed)}/s | <b>UL:</b> {get_readable_file_size(up_speed)}/s"
+        bmsg = f"\n🖥️ <b>CPU:</b> {cpu_percent()}% | 💿 <b>FREE:</b> {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)}"
+        bmsg += f"\n🔻 <b>DL:</b> {get_readable_file_size(dl_speed)}/s | 🔺 <b>UL:</b> {get_readable_file_size(up_speed)}/s"
         if STATUS_LIMIT is not None and tasks > STATUS_LIMIT:
-            msg += f"<b>Page:</b> {PAGE_NO}/{pages} | <b>Tasks:</b> {tasks}\n"
+            msg += f" | 📑 <b>Page:</b> {PAGE_NO}/{pages}"
             buttons = ButtonMaker()
-            buttons.sbutton("Previous", "status pre")
-            buttons.sbutton("Next", "status nex")
+            buttons.sbutton("⏪ Previous", "status pre")
+            buttons.sbutton("Next ⏩", "status nex")
             button = buttons.build_menu(2)
             return msg + bmsg, button
         return msg + bmsg, ""
@@ -207,17 +223,17 @@ def get_readable_time(seconds: int) -> str:
     (days, remainder) = divmod(seconds, 86400)
     days = int(days)
     if days != 0:
-        result += f'{days}d'
+        result += f'{days} hari '
     (hours, remainder) = divmod(remainder, 3600)
     hours = int(hours)
     if hours != 0:
-        result += f'{hours}h'
+        result += f'{hours} jam '
     (minutes, seconds) = divmod(remainder, 60)
     minutes = int(minutes)
     if minutes != 0:
-        result += f'{minutes}m'
+        result += f'{minutes} menit '
     seconds = int(seconds)
-    result += f'{seconds}s'
+    result += f'{seconds} detik '
     return result
 
 def is_url(url: str):
@@ -226,6 +242,17 @@ def is_url(url: str):
 
 def is_gdrive_link(url: str):
     return "drive.google.com" in url
+
+def is_sharerpw_link(url: str):
+    return "sharer.pw" in url
+
+def is_gdtot_link(url: str):
+    url = re_match(r'https?://.+\.gdtot\.\S+', url)
+    return bool(url)
+
+def is_appdrive_link(url: str):
+    appdrive_links = ['appdrive.in', 'driveapp.in', 'drivehub.in', 'gdflix.pro', 'drivesharer.in', 'drivebit.in', 'drivelinks.in', 'driveace.in', 'drivepro.in']
+    return any(x in url for x in appdrive_links)
 
 def is_mega_link(url: str):
     return "mega.nz" in url or "mega.co.nz" in url
@@ -267,3 +294,4 @@ def get_content_type(link: str) -> str:
         except:
             content_type = None
     return content_type
+

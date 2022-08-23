@@ -86,6 +86,20 @@ def get_path_size(path: str):
             total_size += ospath.getsize(abs_path)
     return total_size
 
+def check_storage_threshold(size: int, arch=False, alloc=False):
+    if not alloc:
+        if not arch:
+            if disk_usage(DOWNLOAD_DIR).free - size < STORAGE_THRESHOLD * 1024**3:
+                return False
+        elif disk_usage(DOWNLOAD_DIR).free - (size * 2) < STORAGE_THRESHOLD * 1024**3:
+            return False
+    elif not arch:
+        if disk_usage(DOWNLOAD_DIR).free < STORAGE_THRESHOLD * 1024**3:
+            return False
+    elif disk_usage(DOWNLOAD_DIR).free - size < STORAGE_THRESHOLD * 1024**3:
+        return False
+    return True
+
 def get_base_name(orig_path: str):
     ext = [ext for ext in ARCH_EXT if orig_path.lower().endswith(ext)]
     if len(ext) > 0:
@@ -111,7 +125,7 @@ def take_ss(video_file, duration):
         duration = 3
     duration = duration // 2
 
-    status = srun(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(duration),
+    status = srun(["opera", "-hide_banner", "-loglevel", "error", "-ss", str(duration),
                    "-i", video_file, "-frames:v", "1", des_dir])
 
     if status.returncode != 0 or not ospath.lexists(des_dir):
@@ -131,25 +145,23 @@ def split_file(path, size, file_, dirpath, split_size, listener, start_time=0, i
     if EQUAL_SPLITS and not inLoop:
         split_size = ceil(size/parts) + 1000
     if get_media_streams(path)[0]:
-        duration = get_media_info(path)[0]
         base_name, extension = ospath.splitext(file_)
+        duration = get_media_info(path)[0]
         split_size = split_size - 5000000
         while i <= parts:
             parted_name = "{}.part{}{}".format(str(base_name), str(i).zfill(3), str(extension))
             out_path = ospath.join(dirpath, parted_name)
             if not noMap:
-                listener.suproc = Popen(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(start_time),
-                                         "-i", path, "-fs", str(split_size), "-map", "0", "-map_chapters", "-1",
-                                         "-c", "copy", out_path])
+                listener.suproc = Popen(["opera", "-hide_banner", "-loglevel", "error", "-ss", str(start_time),
+                                "-i", path, "-fs", str(split_size), "-map", "0", "-map_chapters", "-1", "-c", "copy", out_path])
             else:
-                listener.suproc = Popen(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(start_time),
-                                          "-i", path, "-fs", str(split_size), "-map_chapters", "-1", "-c", "copy",
-                                          out_path])
+                listener.suproc = Popen(["opera", "-hide_banner", "-loglevel", "error", "-ss", str(start_time),
+                                "-i", path, "-fs", str(split_size), "-map_chapters", "-1", "-c", "copy", out_path])
             listener.suproc.wait()
             if listener.suproc.returncode == -9:
                 return False
             elif listener.suproc.returncode != 0 and not noMap:
-                LOGGER.warning(f"Retrying without map, -map 0 not working in all situations. Path: {path}")
+                LOGGER.warning(f'Retrying without map, -map 0 not working in all situations. Path: {path}')
                 try:
                     osremove(out_path)
                 except:
@@ -170,7 +182,7 @@ def split_file(path, size, file_, dirpath, split_size, listener, start_time=0, i
                 return split_file(path, size, file_, dirpath, split_size, listener, start_time, i, True, noMap)
             lpd = get_media_info(out_path)[0]
             if lpd == 0:
-                LOGGER.error(f'Something went wrong while splitting, mostly file is corrupted. Path: {path}')
+                LOGGER.error(f'Something went wrong while splitting mostly file is corrupted. Path: {path}')
                 break
             elif duration == lpd:
                 LOGGER.warning(f"This file has been splitted with default stream and audio, so you will only see one part with less size from orginal one because it doesn't have all streams and audios. This happens mostly with MKV videos. noMap={noMap}. Path: {path}")
@@ -182,8 +194,7 @@ def split_file(path, size, file_, dirpath, split_size, listener, start_time=0, i
             i = i + 1
     else:
         out_path = ospath.join(dirpath, file_ + ".")
-        listener.suproc = Popen(["split", "--numeric-suffixes=1", "--suffix-length=3",
-                                f"--bytes={split_size}", path, out_path])
+        listener.suproc = Popen(["split", "--numeric-suffixes=1", "--suffix-length=3", f"--bytes={split_size}", path, out_path])
         listener.suproc.wait()
         if listener.suproc.returncode == -9:
             return False
@@ -195,7 +206,7 @@ def get_media_info(path):
         result = check_output(["ffprobe", "-hide_banner", "-loglevel", "error", "-print_format",
                                "json", "-show_format", "-show_streams", path]).decode('utf-8')
     except Exception as e:
-        LOGGER.error(f'{e}. Mostly file not found!')
+        LOGGER.error(f'{e} Mostly file not Found!')
         return 0, None, None
 
     fields = jsonloads(result).get('format')
@@ -240,10 +251,10 @@ def get_media_streams(path):
         LOGGER.error(f"get_media_streams: {result}")
         return is_video, is_audio
 
+
     for stream in fields:
         if stream.get('codec_type') == 'video':
             is_video = True
         elif stream.get('codec_type') == 'audio':
             is_audio = True
     return is_video, is_audio
-

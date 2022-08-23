@@ -5,8 +5,8 @@ from pyrogram.errors import FloodWait, RPCError
 from PIL import Image
 from threading import RLock
 
-from bot import AS_DOCUMENT, AS_DOC_USERS, AS_MEDIA_USERS, CUSTOM_FILENAME, EXTENSION_FILTER, app
-from bot.helper.ext_utils.fs_utils import take_ss, get_media_info, get_media_streams, clean_unwanted
+from bot import AS_DOCUMENT, AS_DOC_USERS, AS_MEDIA_USERS, CUSTOM_FILENAME, EXTENSION_FILTER, app, LEECH_SPLIT_SIZE
+from bot.helper.ext_utils.fs_utils import take_ss, get_media_info, clean_unwanted, get_media_streams
 from bot.helper.ext_utils.bot_utils import get_readable_file_size
 
 LOGGER = getLogger(__name__)
@@ -194,4 +194,4 @@ class TgUploader:
     def cancel_download(self):
         self.__is_cancelled = True
         LOGGER.info(f"Cancelling Upload: {self.name}")
-        self.__listener.onUploadError('your upload has been stopped!')
+        self.__listener.onUploadError('Upload kamu telah dihentikan!')

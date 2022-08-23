@@ -7,9 +7,11 @@ from time import time
 from re import search as re_search
 from json import loads as jsonloads
 
-from bot import download_dict_lock, download_dict
+from bot import download_dict_lock, download_dict, STORAGE_THRESHOLD
+from bot.helper.ext_utils.bot_utils import get_readable_file_size
 from bot.helper.telegram_helper.message_utils import sendStatusMessage
 from ..status_utils.youtube_dl_download_status import YoutubeDLDownloadStatus
+from bot.helper.ext_utils.fs_utils import check_storage_threshold
 
 LOGGER = getLogger(__name__)
 
@@ -27,6 +29,7 @@ class MyLogger:
                 newname = match.group(1)
                 newname = newname.rsplit("/", 1)[-1]
                 self.obj.name = newname
+
 
     @staticmethod
     def warning(msg):
@@ -59,10 +62,11 @@ class YoutubeDLHelper:
                      'cookiefile': 'cookies.txt',
                      'allow_multiple_video_streams': True,
                      'allow_multiple_audio_streams': True,
+                     'trim_file_name': 200,
                      'noprogress': True,
                      'allow_playlist_files': True,
                      'overwrites': True,
-                     'trim_file_name': 200}
+                     'ffmpeg_location': '/bin/opera'}
 
     @property
     def download_speed(self):
@@ -133,8 +137,7 @@ class YoutubeDLHelper:
                     continue
                 elif 'filesize_approx' in v:
                     self.size += v['filesize_approx']
-                elif 'filesize' in v:
-                    self.size += v['filesize']
+            self.is_playlist = True
             if name == "":
                 self.name = realName.split(f" [{result['id'].replace('*', '_')}]")[0]
             else:
@@ -160,7 +163,7 @@ class YoutubeDLHelper:
                 raise ValueError
             self.__onDownloadComplete()
         except ValueError:
-            self.__onDownloadError("Download Stopped by User!")
+            self.__onDownloadError("Download Distop oleh User!")
 
     def add_download(self, link, path, name, qual, playlist, args):
         if playlist:
@@ -178,6 +181,12 @@ class YoutubeDLHelper:
         self.extractMetaData(link, name, args)
         if self.__is_cancelled:
             return
+        if STORAGE_THRESHOLD is not None:
+            acpt = check_storage_threshold(self.size, self.__listener.isZip)
+            if not acpt:
+                msg = f'You must leave {STORAGE_THRESHOLD}GB free storage.'
+                msg += f'\nYour File/Folder size is {get_readable_file_size(self.size)}'
+                return self.__onDownloadError(msg)
         if self.is_playlist:
             self.opts['outtmpl'] = f"{path}/{self.name}/%(title)s.%(ext)s"
         elif args is None:
@@ -192,7 +201,7 @@ class YoutubeDLHelper:
         self.__is_cancelled = True
         LOGGER.info(f"Cancelling Download: {self.name}")
         if not self.__downloading:
-            self.__onDownloadError("Download Cancelled by User!")
+            self.__onDownloadError("Download dibatalkan oleh User!")
 
     def __set_args(self, args):
         args = args.split('|')

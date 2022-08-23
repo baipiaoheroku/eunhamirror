@@ -60,6 +60,7 @@ def unauthorize(update, context):
             AUTHORIZED_CHATS.remove(chat_id)
         else:
             msg = 'Chat Already Unauthorized!'
+
     sendMessage(msg, context.bot, update.message)
 
 def addSudo(update, context):

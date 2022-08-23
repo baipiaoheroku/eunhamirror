@@ -1,24 +1,24 @@
 from time import sleep, time
 from os import remove, path as ospath
 
-from bot import aria2, download_dict_lock, download_dict, STOP_DUPLICATE, BASE_URL, LOGGER
+from bot import aria2, download_dict_lock, download_dict, STOP_DUPLICATE, SEED_LIMIT,TORRENT_DIRECT_LIMIT, ZIP_UNZIP_LIMIT, LOGGER, STORAGE_THRESHOLD, BASE_URL
 from bot.helper.mirror_utils.upload_utils.gdriveTools import GoogleDriveHelper
-from bot.helper.ext_utils.bot_utils import is_magnet, getDownloadByGid, new_thread, bt_selection_buttons
+from bot.helper.ext_utils.bot_utils import is_magnet, getDownloadByGid, new_thread, get_readable_file_size, bt_selection_buttons
 from bot.helper.mirror_utils.status_utils.aria_download_status import AriaDownloadStatus
 from bot.helper.telegram_helper.message_utils import sendMarkup, sendStatusMessage, sendMessage, deleteMessage, update_all_messages, sendFile
-from bot.helper.ext_utils.fs_utils import get_base_name, clean_unwanted
+from bot.helper.ext_utils.fs_utils import get_base_name, check_storage_threshold, clean_unwanted
 
 
 @new_thread
 def __onDownloadStarted(api, gid):
     download = api.get_download(gid)
     if download.is_metadata:
-        LOGGER.info(f'onDownloadStarted: {gid} METADATA')
+        LOGGER.info(f'onDownloadStarted: {gid} Metadata')
         sleep(1)
         if dl := getDownloadByGid(gid):
             listener = dl.listener()
             if listener.select:
-                metamsg = "Downloading Metadata, wait then you can select files. Use torrent file to avoid this wait."
+                metamsg = f"ℹ️ {listener.tag} Downloading Metadata, tunggu sebentar. Gunakan file .torrent untuk menghindari proses ini."
                 meta = sendMessage(metamsg, listener.bot, listener.message)
                 while True:
                     if download.is_removed or download.followed_by_ids:
@@ -29,20 +29,44 @@ def __onDownloadStarted(api, gid):
     else:
         LOGGER.info(f'onDownloadStarted: {download.name} - Gid: {gid}')
     try:
-        if STOP_DUPLICATE:
+        if any([STOP_DUPLICATE, TORRENT_DIRECT_LIMIT, ZIP_UNZIP_LIMIT, STORAGE_THRESHOLD]):
             sleep(1)
             if dl := getDownloadByGid(gid):
                 listener = dl.listener()
+                download = api.get_download(gid)
+                LOGGER.info('Checking File/Folder Size...')
+                limit = None
+                size = download.total_length
+                arch = any([listener.isZip, listener.extract])
+                if STORAGE_THRESHOLD is not None:
+                    acpt = check_storage_threshold(size, arch, True)
+                    # True if files allocated, if allocation disabled remove True arg
+                    if not acpt:
+                        msg = f'You must leave {STORAGE_THRESHOLD}GB free storage.'
+                        msg += f'\nYour File/Folder size is {get_readable_file_size(size)}'
+                        listener.onDownloadError(msg)
+                        api.remove([download], force=True, files=True)
+                        return
+                if ZIP_UNZIP_LIMIT is not None and arch:
+                    mssg = f'Zip/Unzip limit {ZIP_UNZIP_LIMIT}GB'
+                    limit = ZIP_UNZIP_LIMIT
+                elif TORRENT_DIRECT_LIMIT is not None:
+                    mssg = f'Torrent/Direct limit {TORRENT_DIRECT_LIMIT}GB'
+                    limit = TORRENT_DIRECT_LIMIT
+                if limit is not None:
+                    if size > limit * 1024**3:
+                        listener.onDownloadError(f'{mssg}. Ukuran file/folder kamu adalah {get_readable_file_size(size)}')
+                        api.remove([download], force=True, files=True)
+                        return
                 if listener.isLeech or listener.select:
                     return
-                download = api.get_download(gid)
                 if not download.is_torrent:
                     sleep(3)
                     download = download.live
                 LOGGER.info('Checking File/Folder if already in Drive...')
                 sname = download.name
                 if listener.isZip:
-                    sname = f"{sname}.zip"
+                    sname = sname + ".zip"
                 elif listener.extract:
                     try:
                         sname = get_base_name(sname)
@@ -51,13 +75,11 @@ def __onDownloadStarted(api, gid):
                 if sname is not None:
                     cap, f_name = GoogleDriveHelper().drive_list(sname, True)
                     if cap:
-                        listener.onDownloadError('File/Folder already available in Drive.')
+                        listener.onDownloadError(f'<code>{sname}</code> <b><u>sudah ada di Drive</u></b>', listfile=f_name)
                         api.remove([download], force=True, files=True)
-                        cap = f"Here are the search results:\n\n{cap}"
-                        sendFile(listener.bot, listener.message, f_name, cap)
                         return
     except Exception as e:
-        LOGGER.error(f"{e} onDownloadStart: {gid} check duplicate didn't pass")
+        LOGGER.error(f"{e} onDownloadStart: {gid} check duplicate and size check didn't pass")
 
 @new_thread
 def __onDownloadComplete(api, gid):
@@ -73,7 +95,7 @@ def __onDownloadComplete(api, gid):
             if BASE_URL is not None and listener.select:
                 api.client.force_pause(new_gid)
                 SBUTTONS = bt_selection_buttons(new_gid)
-                msg = "Your download paused. Choose files then press Done Selecting button to start downloading."
+                msg = f"⛔️ {listener.tag} Download kamu dijeda. Silahkan pilih file kemudian tekan tombol Selesai Memilih untuk memulai download."
                 sendMarkup(msg, listener.bot, listener.message, SBUTTONS)
     elif download.is_torrent:
         if dl := getDownloadByGid(gid):
@@ -116,6 +138,14 @@ def __onBtDownloadComplete(api, gid):
             api.client.force_pause(gid)
         listener.onDownloadComplete()
         if listener.seed:
+            if SEED_LIMIT is not None:
+                _ratio = api.client.get_option(gid).get('seed-ratio')
+                LOGGER.info(f"SEED_LIMIT seeding ratio: {_ratio}")
+                size = download.total_length if not _ratio else (download.total_length * float(_ratio))
+                if size > SEED_LIMIT * 1024**3:
+                    listener.onUploadError(f"Seeding torrent limit {SEED_LIMIT} GB. Ukuran File/folder yang akan di seeding adalah {get_readable_file_size(size)}")
+                    api.remove([download], force=True, files=True)
+                    return
             with download_dict_lock:
                 if listener.uid not in download_dict:
                     api.remove([download], force=True, files=True)
@@ -139,7 +169,8 @@ def __onBtDownloadComplete(api, gid):
 def __onDownloadStopped(api, gid):
     sleep(6)
     if dl := getDownloadByGid(gid):
-        dl.listener().onDownloadError('Dead torrent!')
+        download = api.get_download(gid)
+        dl.listener().onDownloadError(f'<code>{download.name.replace("[METADATA]","")}</code> adalah <b><u>Dead torrent</u></b>')
 
 @new_thread
 def __onDownloadError(api, gid):
@@ -152,7 +183,7 @@ def __onDownloadError(api, gid):
     except:
         pass
     if dl := getDownloadByGid(gid):
-        dl.listener().onDownloadError(error)
+        dl.listener().onDownloadError(f"Oops terjadi error atau sepertinya link kamu bukan direct link.\n\n<code>aria2_onDownload_error: {error}</code>")
 
 def start_listener():
     aria2.listen_to_notifications(threaded=True,
@@ -173,14 +204,18 @@ def add_aria2c_download(link: str, path, listener, filename, auth, select, ratio
         args['seed-ratio'] = ratio
     if seed_time:
         args['seed-time'] = seed_time
+    if 'static.romsget.io' in link:
+        args['header'] = "Referer: https://www.romsget.io/"
+
     if is_magnet(link):
         download = aria2.add_magnet(link, args)
     else:
         download = aria2.add_uris([link], args)
+
     if download.error_message:
         error = str(download.error_message).replace('<', ' ').replace('>', ' ')
         LOGGER.info(f"Download Error: {error}")
-        return sendMessage(error, listener.bot, listener.message)
+        return sendMessage(f"⚠️ {listener.tag} Oops terjadi error atau sepertinya link kamu bukan direct link.\n\n<code>aria2_addDownload_error: {error}</code>", listener.bot, listener.message)
     with download_dict_lock:
         download_dict[listener.uid] = AriaDownloadStatus(download.gid, listener)
         LOGGER.info(f"Aria2Download started: {download.gid}")

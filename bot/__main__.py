@@ -5,16 +5,18 @@ from psutil import disk_usage, cpu_percent, swap_memory, cpu_count, virtual_memo
 from time import time
 from sys import executable
 from telegram.ext import CommandHandler
+from threading import Thread
 
-from bot import bot, dispatcher, updater, botStartTime, IGNORE_PENDING_REQUESTS, LOGGER, Interval, INCOMPLETE_TASK_NOTIFIER, DB_URI, app, main_loop
+from bot import bot, dispatcher, updater, botStartTime, IGNORE_PENDING_REQUESTS, LOGGER, Interval, INCOMPLETE_TASK_NOTIFIER, DB_URI, alive, app, main_loop, AUTHORIZED_CHATS
 from .helper.ext_utils.fs_utils import start_cleanup, clean_all, exit_clean_up
 from .helper.ext_utils.bot_utils import get_readable_file_size, get_readable_time
 from .helper.ext_utils.db_handler import DbManger
 from .helper.telegram_helper.bot_commands import BotCommands
-from .helper.telegram_helper.message_utils import sendMessage, sendMarkup, editMessage, sendLogFile
+from .helper.telegram_helper.message_utils import sendMessage, sendMarkup, editMessage, sendLogFile, auto_delete_message
 from .helper.telegram_helper.filters import CustomFilters
 from .helper.telegram_helper.button_build import ButtonMaker
-from .modules import authorize, list, cancel_mirror, mirror_status, mirror_leech, clone, ytdlp, shell, eval, delete, count, leech_settings, search, rss, bt_select
+
+from .modules import authorize, list, cancel_mirror, mirror_status, mirror_leech, clone, ytdlp, shell, eval, delete, count, leech_settings, search, rss, bt_select, sleep
 
 
 def stats(update, context):
@@ -79,8 +81,9 @@ def restart(update, context):
     if Interval:
         Interval[0].cancel()
         Interval.clear()
+    alive.kill()
     clean_all()
-    srun(["pkill", "-f", "gunicorn|aria2c|qbittorrent-nox"])
+    srun(["pkill", "-9", "-f", "gunicorn|chrome|firefox|megasdkrest"])
     srun(["python3", "update.py"])
     with open(".restartmsg", "w") as f:
         f.truncate(0)
@@ -99,85 +102,119 @@ def log(update, context):
     sendLogFile(context.bot, update.message)
 
 help_string = f'''
-NOTE: Try each command without any perfix to see more detalis.
-/{BotCommands.MirrorCommand[0]} or /{BotCommands.MirrorCommand[1]}: Start mirroring to Google Drive.
-/{BotCommands.ZipMirrorCommand[0]} or /{BotCommands.ZipMirrorCommand[1]}: Start mirroring and upload the file/folder compressed with zip extension.
-/{BotCommands.UnzipMirrorCommand[0]} or /{BotCommands.UnzipMirrorCommand[1]}: Start mirroring and upload the file/folder extracted from any archive extension.
-/{BotCommands.QbMirrorCommand[0]} or /{BotCommands.QbMirrorCommand[1]}: Start Mirroring to Google Drive using qBittorrent.
-/{BotCommands.QbZipMirrorCommand[0]} or /{BotCommands.QbZipMirrorCommand[1]}: Start mirroring using qBittorrent and upload the file/folder compressed with zip extension.
-/{BotCommands.QbUnzipMirrorCommand[0]} or /{BotCommands.QbUnzipMirrorCommand[1]}: Start mirroring using qBittorrent and upload the file/folder extracted from any archive extension.
-/{BotCommands.YtdlCommand[0]} or /{BotCommands.YtdlCommand[1]}: Mirror yt-dlp supported link.
-/{BotCommands.YtdlZipCommand[0]} or /{BotCommands.YtdlZipCommand[1]}: Mirror yt-dlp supported link as zip.
-/{BotCommands.LeechCommand[0]} or /{BotCommands.LeechCommand[1]}: Start leeching to Telegram.
-/{BotCommands.ZipLeechCommand[0]} or /{BotCommands.ZipLeechCommand[1]}: Start leeching and upload the file/folder compressed with zip extension.
-/{BotCommands.UnzipLeechCommand[0]} or /{BotCommands.UnzipLeechCommand[1]}: Start leeching and upload the file/folder extracted from any archive extension.
-/{BotCommands.QbLeechCommand[0]} or /{BotCommands.QbLeechCommand[1]}: Start leeching using qBittorrent.
-/{BotCommands.QbZipLeechCommand[0]} or /{BotCommands.QbZipLeechCommand[1]}: Start leeching using qBittorrent and upload the file/folder compressed with zip extension.
-/{BotCommands.QbUnzipLeechCommand[0]} or /{BotCommands.QbUnzipLeechCommand[1]}: Start leeching using qBittorrent and upload the file/folder extracted from any archive extension.
-/{BotCommands.YtdlLeechCommand[0]} or /{BotCommands.YtdlLeechCommand[1]}: Leech yt-dlp supported link.
-/{BotCommands.YtdlZipLeechCommand[0]} or /{BotCommands.YtdlZipLeechCommand[1]}: Leech yt-dlp supported link as zip.
-/{BotCommands.CloneCommand} [drive_url]: Copy file/folder to Google Drive.
-/{BotCommands.CountCommand} [drive_url]: Count file/folder of Google Drive.
-/{BotCommands.DeleteCommand} [drive_url]: Delete file/folder from Google Drive (Only Owner & Sudo).
-/{BotCommands.LeechSetCommand} [query]: Leech settings.
-/{BotCommands.SetThumbCommand}: Reply photo to set it as Thumbnail.
-/{BotCommands.BtSelectCommand}: Select files from torrents by gid or reply.
-/{BotCommands.RssListCommand[0]} or /{BotCommands.RssListCommand[1]}: List all subscribed rss feed info (Only Owner & Sudo).
-/{BotCommands.RssGetCommand[0]} or /{BotCommands.RssGetCommand[1]}: Force fetch last N links (Only Owner & Sudo).
-/{BotCommands.RssSubCommand[0]} or /{BotCommands.RssSubCommand[1]}: Subscribe new rss feed (Only Owner & Sudo).
-/{BotCommands.RssUnSubCommand[0]} or /{BotCommands.RssUnSubCommand[1]}: Unubscribe rss feed by title (Only Owner & Sudo).
-/{BotCommands.RssSettingsCommand[0]} or /{BotCommands.RssSettingsCommand[1]} [query]: Rss Settings (Only Owner & Sudo).
-/{BotCommands.CancelMirror}: Cancel task by gid or reply.
-/{BotCommands.CancelAllCommand} [query]: Cancel all [status] tasks.
-/{BotCommands.ListCommand} [query]: Search in Google Drive(s).
-/{BotCommands.SearchCommand} [query]: Search for torrents with API.
-/{BotCommands.StatusCommand}: Shows a status of all the downloads.
-/{BotCommands.StatsCommand}: Show stats of the machine where the bot is hosted in.
-/{BotCommands.PingCommand}: Check how long it takes to Ping the Bot (Only Owner & Sudo).
-/{BotCommands.AuthorizeCommand}: Authorize a chat or a user to use the bot (Only Owner & Sudo).
-/{BotCommands.UnAuthorizeCommand}: Unauthorize a chat or a user to use the bot (Only Owner & Sudo).
-/{BotCommands.AuthorizedUsersCommand}: Show authorized users (Only Owner & Sudo).
-/{BotCommands.AddSudoCommand}: Add sudo user (Only Owner).
-/{BotCommands.RmSudoCommand}: Remove sudo users (Only Owner).
-/{BotCommands.RestartCommand}: Restart and update the bot (Only Owner & Sudo).
-/{BotCommands.LogCommand}: Get a log file of the bot. Handy for getting crash reports (Only Owner & Sudo).
-/{BotCommands.ShellCommand}: Run shell commands (Only Owner).
-/{BotCommands.EvalCommand}: Run Python Code Line | Lines (Only Owner).
-/{BotCommands.ExecCommand}: Run Commands In Exec (Only Owner).
-/{BotCommands.ClearLocalsCommand}: Clear {BotCommands.EvalCommand} or {BotCommands.ExecCommand} locals (Only Owner).
+CATATAN: Coba setiap perintah tanpa perfiks apa pun untuk melihat lebih detail.
+/{BotCommands.MirrorCommand[0]} atau /{BotCommands.MirrorCommand[1]}: Mulai mirroring ke Google Drive.
+/{BotCommands.ZipMirrorCommand[0]} atau /{BotCommands.ZipMirrorCommand[1]}: Mulai mirroring dan unggah file/folder yang dikompresi dengan ekstensi zip.
+/{BotCommands.UnzipMirrorCommand[0]} atau /{BotCommands.UnzipMirrorCommand[1]}: Mulai mirroring dan unggah file/folder yang diekstrak dari ekstensi arsip apa pun.
+/{BotCommands.QbMirrorCommand[0]} atau /{BotCommands.QbMirrorCommand[1]}: Mulai Mencerminkan ke Google Drive menggunakan qBittorrent.
+/{BotCommands.QbZipMirrorCommand[0]} atau /{BotCommands.QbZipMirrorCommand[1]}: Mulai mirroring menggunakan qBittorrent dan unggah file/folder yang dikompresi dengan ekstensi zip.
+/{BotCommands.QbUnzipMirrorCommand[0]} atau /{BotCommands.QbUnzipMirrorCommand[1]}: Mulai mirroring menggunakan qBittorrent dan unggah file/folder yang diekstrak dari ekstensi arsip apa pun.
+/{BotCommands.YtdlCommand[0]} atau /{BotCommands.YtdlCommand[1]}: Mencerminkan tautan yang didukung yt-dlp.
+/{BotCommands.YtdlZipCommand[0]} atau /{BotCommands.YtdlZipCommand[1]}: Mencerminkan tautan yang didukung yt-dlp sebagai zip.
+/{BotCommands.LeechCommand[0]} atau /{BotCommands.LeechCommand[1]}: Mulai leeching ke Telegram.
+/{BotCommands.ZipLeechCommand[0]} atau /{BotCommands.ZipLeechCommand[1]}: Mulai leeching dan unggah file/folder yang dikompres dengan ekstensi zip.
+/{BotCommands.UnzipLeechCommand[0]} atau /{BotCommands.UnzipLeechCommand[1]}: Mulai leeching dan unggah file/folder yang diekstrak dari ekstensi arsip apa pun.
+/{BotCommands.QbLeechCommand[0]} atau /{BotCommands.QbLeechCommand[1]}: Mulai lintah menggunakan qBittorrent.
+/{BotCommands.QbZipLeechCommand[0]} atau /{BotCommands.QbZipLeechCommand[1]}: Mulai leeching menggunakan qBittorrent dan unggah file/folder yang dikompresi dengan ekstensi zip.
+/{BotCommands.QbUnzipLeechCommand[0]} atau /{BotCommands.QbUnzipLeechCommand[1]}: Mulai leeching menggunakan qBittorrent dan unggah file/folder yang diekstrak dari ekstensi arsip apa pun.
+/{BotCommands.YtdlLeechCommand[0]} atau /{BotCommands.YtdlLeechCommand[1]}: Tautan yang didukung Leech yt-dlp.
+/{BotCommands.YtdlZipLeechCommand[0]} atau /{BotCommands.YtdlZipLeechCommand[1]}: Lintah yt-dlp mendukung tautan sebagai zip.
+/{BotCommands.CloneCommand} [drive_url]: Salin file/folder ke Google Drive.
+/{BotCommands.CountCommand} [drive_url]: Menghitung file/folder Google Drive.
+/{BotCommands.DeleteCommand} [drive_url]: Menghapus file/folder dari Google Drive (Hanya Pemilik & Sudo).
+/{BotCommands.LeechSetCommand} [permintaan]: Setelan lintah.
+/{BotCommands.SetThumbCommand}: Balas foto untuk mengaturnya sebagai Thumbnail.
+/{BotCommands.BtSelectCommand}: Pilih file dari torrent dengan gid atau balas.
+/{BotCommands.RssListCommand[0]} atau /{BotCommands.RssListCommand[1]}: Mencantumkan semua info rss feed yang dilanggan (Hanya Pemilik & Sudo).
+/{BotCommands.RssGetCommand[0]} atau /{BotCommands.RssGetCommand[1]}: Ambil paksa N tautan terakhir (Hanya Pemilik & Sudo).
+/{BotCommands.RssSubCommand[0]} atau /{BotCommands.RssSubCommand[1]}: Berlangganan rss feed baru (Hanya Pemilik & Sudo).
+/{BotCommands.RssUnSubCommand[0]} atau /{BotCommands.RssUnSubCommand[1]}: Berhenti berlangganan umpan rss berdasarkan judul (Hanya Pemilik & Sudo).
+/{BotCommands.RssSettingsCommand[0]} atau /{BotCommands.RssSettingsCommand[1]} [query]: Pengaturan Rss (Hanya Pemilik & Sudo).
+/{BotCommands.CancelMirror}: Membatalkan tugas dengan gid atau membalas.
+/{BotCommands.CancelAllCommand} [query]: Membatalkan semua tugas [status].
+/{BotCommands.ListCommand} [query]: Telusuri di Google Drive.
+/{BotCommands.SearchCommand} [query]: Mencari torrent dengan API.
+/{BotCommands.StatusCommand}: Menampilkan status semua unduhan.
+/{BotCommands.StatsCommand}: Menampilkan statistik mesin tempat bot dihosting.
+/{BotCommands.PingCommand}: Periksa berapa lama waktu yang dibutuhkan untuk melakukan Ping pada Bot (Hanya Pemilik & Sudo).
+/{BotCommands.AuthorizeCommand}: Mengotorisasi obrolan atau pengguna untuk menggunakan bot (Hanya Pemilik & Sudo).
+/{BotCommands.UnAuthorizeCommand}: Membatalkan otorisasi obrolan atau pengguna untuk menggunakan bot (Hanya Pemilik & Sudo).
+/{BotCommands.AuthorizedUsersCommand}: Menampilkan pengguna yang diotorisasi (Hanya Pemilik & Sudo).
+/{BotCommands.AddSudoCommand}: Tambahkan pengguna sudo (Hanya Pemilik).
+/{BotCommands.RmSudoCommand}: Menghapus pengguna sudo (Hanya Pemilik).
+/{BotCommands.RestartCommand}: Mulai ulang dan perbarui bot (Hanya Pemilik & Sudo).
+/{BotCommands.LogCommand}: Dapatkan file log bot. Berguna untuk mendapatkan laporan kerusakan (Hanya Pemilik & Sudo).
+/{BotCommands.ShellCommand}: Jalankan perintah shell (Hanya Pemilik).
+/{BotCommands.EvalCommand}: Jalankan Baris Kode Python | Garis (Hanya Pemilik).
+/{BotCommands.ExecCommand}: Jalankan Perintah Di Exec (Hanya Pemilik).
+/{BotCommands.ClearLocalsCommand}: Hapus penduduk lokal {BotCommands.EvalCommand} atau {BotCommands.ExecCommand} (Hanya Pemilik).
 '''
 
 def bot_help(update, context):
     sendMessage(help_string, context.bot, update.message)
 
+botcmds = [
+
+        (f'{BotCommands.MirrorCommand[0]}', 'Mirror'),
+        (f'{BotCommands.ZipMirrorCommand[0]}','Mirror lalu arsip ke zip'),
+        (f'{BotCommands.UnzipMirrorCommand[0]}','Mirror dan ekstrak file'),
+        (f'{BotCommands.QbMirrorCommand[0]}','Mirror torrent menggunakan qBittorrent'),
+        (f'{BotCommands.QbZipMirrorCommand[0]}','Mirror torrent menggunakan qBittorrent dan arsip ke zip'),
+        (f'{BotCommands.QbUnzipMirrorCommand[0]}','Mirror torrent menggunakan qBittorrent dan ekstrak file'),
+        (f'{BotCommands.YtdlCommand[0]}','Mirror YouTube link'),
+        (f'{BotCommands.YtdlZipCommand[0]}','Mirror YouTube link lalu arsip ke zip'),
+        (f'{BotCommands.LeechCommand[0]}','Upload file ke telegram'),
+        (f'{BotCommands.ZipLeechCommand[0]}','Arsip file ke zip lalu Upload ke telegram'),
+        (f'{BotCommands.UnzipLeechCommand[0]}','Ekstrak file lalu Upload file ke telegram'),
+        (f'{BotCommands.QbLeechCommand[0]}','Upload torrent ke telegram menggunakan qBittorrent'),
+        (f'{BotCommands.QbZipLeechCommand[0]}','Arsip torrent ke zip lalu Upload ke telegram menggunakan qBittorrent'),
+        (f'{BotCommands.QbUnzipLeechCommand[0]}','Ekstrak torrent lalu Upload ke telegram menggunakan qBittorrent'),
+        (f'{BotCommands.YtdlLeechCommand[0]}','Upload YouTube video ke telegram'),
+        (f'{BotCommands.YtdlZipLeechCommand[0]}','Arsip ke zip YouTube video lalu upload ke telegram'),
+        (f'{BotCommands.CloneCommand}','Copy file/folder to Drive'),
+        (f'{BotCommands.CountCommand}','Menghitung file/folder dari Drive'),
+        (f'{BotCommands.DeleteCommand}','Menghapus file/folder dari Drive'),
+        (f'{BotCommands.CancelMirror}','Cancel sebuah task'),
+        (f'{BotCommands.CancelAllCommand}','Cancel semua downloading tasks'),
+        (f'{BotCommands.LeechSetCommand}','Leech settings'),
+        (f'{BotCommands.SetThumbCommand}','Set Leech thumbnail'),
+        (f'{BotCommands.ListCommand}', 'Mencari file yang sudah ada di Drive'),
+        (f'{BotCommands.StatusCommand}','Menampilkan status mirror'),
+        (f'{BotCommands.StatsCommand}','Statistik penggunaan bot'),
+        (f'{BotCommands.PingCommand}','Ping bot'),
+        (f'{BotCommands.HelpCommand}','Mendapatkan detail perintah bot')
+    ]
+
 def main():
+    bot.set_my_commands(botcmds)
     start_cleanup()
+    notifier_dict = False
     if INCOMPLETE_TASK_NOTIFIER and DB_URI is not None:
         if notifier_dict := DbManger().get_incomplete_tasks():
             for cid, data in notifier_dict.items():
                 if ospath.isfile(".restartmsg"):
                     with open(".restartmsg") as f:
                         chat_id, msg_id = map(int, f)
-                    msg = 'Restarted Successfully!'
+                    msg = '♻️ <b>Restarted successfully!</b>'
                 else:
-                    msg = 'Bot Restarted!'
+                    msg = '♻️ <b>Bot Restarted!</b>'
                 for tag, links in data.items():
-                     msg += f"\n\n{tag}: "
-                     for index, link in enumerate(links, start=1):
-                         msg += f" <a href='{link}'>{index}</a> |"
-                         if len(msg.encode()) > 4000:
-                             if 'Restarted Successfully!' in msg and cid == chat_id:
-                                 bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTML', disable_web_page_preview=True)
-                                 osremove(".restartmsg")
-                             else:
-                                 try:
-                                     bot.sendMessage(cid, msg, 'HTML', disable_web_page_preview=True)
-                                 except Exception as e:
-                                     LOGGER.error(e)
-                             msg = ''
-                if 'Restarted Successfully!' in msg and cid == chat_id:
-                     bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTML', disable_web_page_preview=True)
-                     osremove(".restartmsg")
+                    msg += f"\n\n⚠️ {tag} <b>{len(links)} Proses mirror kamu dibatalkan</b>"
+                    for index, link in enumerate(links, start=1):
+                        msg += f"\n📍 <a href='{link}'><u>Proses ke {index}</u></a>"
+                        if len(msg.encode()) > 4000:
+                            if '♻️ <b>Restarted successfully!</b>' in msg and cid == chat_id:
+                                bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTMl', disable_web_page_preview=True)
+                                osremove(".restartmsg")
+                            else:
+                                try:
+                                    bot.sendMessage(cid, msg, 'HTML', disable_web_page_preview=True)
+                                except Exception as e:
+                                    LOGGER.error(e)
+                            msg = ''
+                if '♻️ <b>Restarted successfully!</b>' in msg and cid == chat_id:
+                    bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTMl', disable_web_page_preview=True)
+                    osremove(".restartmsg")
                 else:
                     try:
                         bot.sendMessage(cid, msg, 'HTML', disable_web_page_preview=True)
@@ -187,7 +224,7 @@ def main():
     if ospath.isfile(".restartmsg"):
         with open(".restartmsg") as f:
             chat_id, msg_id = map(int, f)
-        bot.edit_message_text("Restarted Successfully!", chat_id, msg_id)
+        bot.editMessageText("♻️ <b>Restarted successfully!</b>", chat_id, msg_id, parse_mode='HTMl', disable_web_page_preview=True)
         osremove(".restartmsg")
 
     start_handler = CommandHandler(BotCommands.StartCommand, start, run_async=True)

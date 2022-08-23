@@ -26,7 +26,7 @@ class TgUploadStatus:
     def progress_raw(self):
         try:
             return self.__obj.uploaded_bytes / self.__size * 100
-        except ZeroDivisionError:
+        except:
             return 0
 
     def progress(self):
@@ -45,7 +45,7 @@ class TgUploadStatus:
         try:
             seconds = (self.__size - self.__obj.uploaded_bytes) / self.speed_raw()
             return f'{get_readable_time(seconds)}'
-        except ZeroDivisionError:
+        except:
             return '-'
 
     def gid(self) -> str:

@@ -11,6 +11,10 @@ hmtl_content = """
         href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css" />
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css">
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.min.js" integrity="sha384-cVKIPhGWiC2Al4u+LWgxfKTRIcfu0JTxR+EQDz/bgldoEyl4H0zUF0QKbrJ0EcQF" crossorigin="anonymous"></script>
     <style>
         * {
             font-family: "Ubuntu", sans-serif;
@@ -23,7 +27,7 @@ hmtl_content = """
         body {
             background-color: #0D1117;
         }
-        .container {
+        .kontainer {
             margin: 0vh 1vw;
             margin-bottom: 1vh;
             padding: 1vh 3vw;
@@ -34,14 +38,14 @@ hmtl_content = """
             background-color: #161b22;
             align-items: center;
         }
-        .container.center {
+        .kontainer.tengah {
             text-align: center;
         }
-        .container.start {
+        .kontainer.mulai {
             text-align: start;
         }
         .rfontsize {
-            font-size: 1rem;
+            font-size: 1.1rem;
         }
         .forhover:hover {
             filter: invert(0.3);
@@ -53,7 +57,9 @@ hmtl_content = """
     </style>
 </head>
 <body>
+<div class="container">
 {msg}
+</div>
 </body>
 </html>
 """

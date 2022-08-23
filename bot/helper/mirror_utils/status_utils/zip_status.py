@@ -66,3 +66,4 @@ class ZipStatus:
         if self.__listener.suproc is not None:
             self.__listener.suproc.kill()
         self.__listener.onUploadError('archiving stopped by user!')
+        
